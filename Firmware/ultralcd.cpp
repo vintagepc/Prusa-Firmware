@@ -6994,6 +6994,14 @@ void stepper_timer_overflow() {
 #endif /* DEBUG_STEPPER_TIMER_MISSED */
 
 
+static void lcd_home_xy() {
+	
+	enquecommand_P(PSTR("G28 X Y"));
+	lcd_setstatuspgm(_T(MSG_AUTO_HOME));
+	lcd_return_to_status();
+	lcd_draw_update = 3;
+}
+
 static void lcd_colorprint_change() {
 	
 	enquecommand_P(PSTR("M600"));
@@ -7045,7 +7053,7 @@ static void lcd_tune_menu()
 #ifdef FILAMENTCHANGEENABLE
 	MENU_ITEM_FUNCTION_P(_T(MSG_FILAMENTCHANGE), lcd_colorprint_change);//7
 #endif
-
+    MENU_ITEM_FUNCTION_P(_T(MSG_AUTO_HOME), lcd_home_xy);//8
 #ifdef FILAMENT_SENSOR
 	if (FSensorStateMenu == 0) {
 		MENU_ITEM_FUNCTION_P(_T(MSG_FSENSOR_OFF), lcd_fsensor_state_set);

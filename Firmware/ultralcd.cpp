@@ -226,6 +226,7 @@ static bool lcd_selftest_fsensor();
 static bool selftest_irsensor();
 static void lcd_selftest_error(TestError error, const char *_error_1, const char *_error_2);
 static void lcd_colorprint_change();
+static void lcd_home_xy();
 #ifdef SNMM
 static int get_ext_nr();
 #endif //SNMM

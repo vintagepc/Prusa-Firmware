@@ -623,7 +623,8 @@ void lcdui_print_percent_done(void)
 	bool num = IS_SD_PRINTING || (PRINTER_ACTIVE && (print_percent_done_normal != PRINT_PERCENT_DONE_INIT));
 	if (!num || heating_status) // either not printing or heating
 	{
-		eeprom_read_block(sheet, EEPROM_Sheets_base->s[eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet))].name, 7);
+		eeprom_read_block(sheet, EEPROM_Sheets_base->s[eeprom_read_byte(
+		        &(EEPROM_Sheets_base->active_sheet))].name, 7);
 		sheet[7] = '\0';
 		lcd_printf_P(PSTR("%s"),sheet);
 	}
@@ -6421,9 +6422,14 @@ void unload_filament()
     raise_z_above(MIN_Z_FOR_UNLOAD);
 
 	//		extr_unload2();
-
+	current_position[E_AXIS] += 5;
+	plan_buffer_line_curposXYZE(500 / 60, active_extruder);
+	st_synchronize();
 	current_position[E_AXIS] -= 45;
 	plan_buffer_line_curposXYZE(5200 / 60, active_extruder);
+	st_synchronize();
+	current_position[E_AXIS] += 10;
+	plan_buffer_line_curposXYZE(500 / 60, active_extruder);
 	st_synchronize();
 	current_position[E_AXIS] -= 15;
 	plan_buffer_line_curposXYZE(1000 / 60, active_extruder);
@@ -6790,7 +6796,15 @@ static void lcd_rename_sheet_menu()
     {
         lcd_putc(menuData->name[i]);
     }
-    lcd_set_cursor(menuData->selected, 1);
+    if (menuData->selected>0)
+    {
+	lcd_set_cursor(menuData->selected-1, 1);    
+	lcd_putc(' ');
+    }
+    else
+    {
+	lcd_set_cursor(menuData->selected, 1);
+    }
     lcd_putc('^');
     if (lcd_clicked())
     {

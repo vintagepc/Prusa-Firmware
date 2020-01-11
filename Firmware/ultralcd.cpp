@@ -19,6 +19,8 @@
 #include "lcd.h"
 #include "menu.h"
 
+#include "backlight.h"
+
 #include "util.h"
 #include "mesh_bed_leveling.h"
 #include "mesh_bed_calibration.h"
@@ -56,6 +58,7 @@ char longFilenameOLD[LONG_FILENAME_LENGTH];
 
 static void lcd_sd_updir();
 static void lcd_mesh_bed_leveling_settings();
+static void lcd_backlight_menu();
 
 int8_t ReInitLCD = 0;
 
@@ -112,7 +115,9 @@ static const char* lcd_display_message_fullscreen_nonBlocking_P(const char *msg,
 
 /* Different menus */
 static void lcd_status_screen();
+#if (LANG_MODE != 0)
 static void lcd_language_menu();
+#endif
 static void lcd_main_menu();
 static void lcd_tune_menu();
 //static void lcd_move_menu();
@@ -245,7 +250,9 @@ static void fil_unload_menu();
 static void lcd_disable_farm_mode();
 static void lcd_set_fan_check();
 static void lcd_cutter_enabled();
+#ifdef SNMM
 static char snmm_stop_print_menu();
+#endif //SNMM
 #ifdef SDCARD_SORT_ALPHA
  static void lcd_sort_type_set();
 #endif
@@ -581,7 +588,7 @@ void lcdui_print_Z_coord(void)
     if (custom_message_type == CustomMsg::MeshBedLeveling)
         lcd_puts_P(_N("Z   --- "));
     else
-		lcd_printf_P(_N("Z%6.2f "), current_position[Z_AXIS]);
+		lcd_printf_P(_N("Z%6.2f%c"), current_position[Z_AXIS], axis_known_position[Z_AXIS]?' ':'?');
 }
 
 #ifdef PLANNER_DIAGNOSTICS
@@ -617,22 +624,24 @@ void lcdui_print_feedrate(void)
 // Print percent done in form "USB---%", " SD---%", "   ---%" (7 chars total)
 void lcdui_print_percent_done(void)
 {
-	char sheet[8];
 	const char* src = is_usb_printing?_N("USB"):(IS_SD_PRINTING?_N(" SD"):_N("   "));
 	char per[4];
 	bool num = IS_SD_PRINTING || (PRINTER_ACTIVE && (print_percent_done_normal != PRINT_PERCENT_DONE_INIT));
 	if (!num || heating_status) // either not printing or heating
 	{
-		eeprom_read_block(sheet, EEPROM_Sheets_base->s[eeprom_read_byte(
-		        &(EEPROM_Sheets_base->active_sheet))].name, 7);
-		sheet[7] = '\0';
-		lcd_printf_P(PSTR("%s"),sheet);
+		const int8_t sheetNR = eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet));
+		const int8_t nextSheet = eeprom_next_initialized_sheet(sheetNR);
+		if ((nextSheet >= 0) && (sheetNR != nextSheet))
+		{
+			char sheet[8];
+			eeprom_read_block(sheet, EEPROM_Sheets_base->s[sheetNR].name, 7);
+			sheet[7] = '\0';
+			lcd_printf_P(PSTR("%-7s"),sheet);
+			return; //do not also print the percentage
+		}
 	}
-	else
-	{
-		sprintf_P(per, num?_N("%3hhd"):_N("---"), calc_percent_done());
-		lcd_printf_P(_N("%3S%3s%%"), src, per);
-	}
+	sprintf_P(per, num?_N("%3hhd"):_N("---"), calc_percent_done());
+	lcd_printf_P(_N("%3S%3s%%"), src, per);
 }
 
 // Print extruder status (5 chars total)
@@ -1052,7 +1061,6 @@ static void lcd_status_screen()
 	}
 
 	if (current_click
-		&& (lcd_commands_type != LcdCommands::StopPrint) //click is aborted unless stop print finishes
 		&& ( menu_block_entering_on_serious_errors == SERIOUS_ERR_NONE ) // or a serious error blocks entering the menu
 	)
 	{
@@ -1101,6 +1109,7 @@ void lcd_commands()
 			lcd_setstatuspgm(_i("Print paused"));////MSG_PRINT_PAUSED c=20 r=1
             lcd_commands_type = LcdCommands::Idle;
             lcd_commands_step = 0;
+            long_pause();
 		}
 	}
 
@@ -1462,98 +1471,6 @@ void lcd_commands()
 
 #endif // not SNMM
 
-	if (lcd_commands_type == LcdCommands::StopPrint)   /// stop print
-	{
-		
-
-		if (lcd_commands_step == 0) 
-		{ 
-			lcd_commands_step = 6; 
-		}
-
-		if (lcd_commands_step == 1 && !blocks_queued())
-		{
-			lcd_commands_step = 0;
-			lcd_commands_type = LcdCommands::Idle;
-			lcd_setstatuspgm(_T(WELCOME_MSG));
-			custom_message_type = CustomMsg::Status;
-			isPrintPaused = false;
-		}
-		if (lcd_commands_step == 2 && !blocks_queued())
-		{
-			setTargetBed(0);
-			enquecommand_P(PSTR("M104 S0")); //set hotend temp to 0
-
-			manage_heater();
-			lcd_setstatuspgm(_T(WELCOME_MSG));
-			cancel_heatup = false;
-			lcd_commands_step = 1;
-		}
-		if (lcd_commands_step == 3 && !blocks_queued())
-		{
-      // M84: Disable steppers.
-			enquecommand_P(PSTR("M84"));
-			autotempShutdown();
-			lcd_commands_step = 2;
-		}
-		if (lcd_commands_step == 4 && !blocks_queued())
-		{
-			lcd_setstatuspgm(_T(MSG_PLEASE_WAIT));
-      // G90: Absolute positioning.
-			enquecommand_P(PSTR("G90"));
-      // M83: Set extruder to relative mode.
-			enquecommand_P(PSTR("M83"));
-			#ifdef X_CANCEL_POS 
-			enquecommand_P(PSTR("G1 X"  STRINGIFY(X_CANCEL_POS) " Y" STRINGIFY(Y_CANCEL_POS) " E0 F7000"));
-			#else
-			enquecommand_P(PSTR("G1 X50 Y" STRINGIFY(Y_MAX_POS) " E0 F7000"));
-			#endif
-			lcd_ignore_click(false);
-			if (mmu_enabled)
-				lcd_commands_step = 8;
-			else
-				lcd_commands_step = 3;
-		}
-		if (lcd_commands_step == 5 && !blocks_queued())
-		{
-			lcd_setstatuspgm(_T(MSG_PRINT_ABORTED));
-      // G91: Set to relative positioning.
-			enquecommand_P(PSTR("G91"));
-      // Lift up.
-			enquecommand_P(PSTR("G1 Z15 F1500"));
-			if (axis_known_position[X_AXIS] && axis_known_position[Y_AXIS]) lcd_commands_step = 4;
-			else lcd_commands_step = 3;
-		}
-		if (lcd_commands_step == 6 && !blocks_queued())
-		{
-			lcd_setstatuspgm(_T(MSG_PRINT_ABORTED));
-			cancel_heatup = true;
-			setTargetBed(0);
-			if (mmu_enabled)
-				setAllTargetHotends(0);
-			manage_heater();
-			custom_message_type = CustomMsg::FilamentLoading;
-			lcd_commands_step = 5;
-		}
-		if (lcd_commands_step == 7 && !blocks_queued())
-		{
-			if (mmu_enabled)
-				enquecommand_P(PSTR("M702 C")); //current
-			else
-				switch(snmm_stop_print_menu())
-				{
-				case 0: enquecommand_P(PSTR("M702")); break;//all 
-				case 1: enquecommand_P(PSTR("M702 U")); break; //used
-				case 2: enquecommand_P(PSTR("M702 C")); break; //current
-				default: enquecommand_P(PSTR("M702")); break;
-				}
-			lcd_commands_step = 3;
-		}
-		if (lcd_commands_step == 8 && !blocks_queued()) { //step 8 is here for delay (going to next step after execution of all gcodes from step 4)
-			lcd_commands_step = 7; 
-		}
-	}
-
 	if (lcd_commands_type == LcdCommands::FarmModeConfirm)   /// farm mode confirm
 	{
 
@@ -1657,9 +1574,8 @@ void lcd_return_to_status()
 //! @brief Pause print, disable nozzle heater, move to park position
 void lcd_pause_print()
 {
-    lcd_return_to_status();
     stop_and_save_print_to_ram(0.0,0.0);
-    long_pause();
+    lcd_return_to_status();
     isPrintPaused = true;
     if (LcdCommands::Idle == lcd_commands_type)
     {
@@ -2283,6 +2199,9 @@ static void lcd_support_menu()
 void lcd_set_fan_check() {
 	fans_check_enabled = !fans_check_enabled;
 	eeprom_update_byte((unsigned char *)EEPROM_FAN_CHECK_ENABLED, fans_check_enabled);
+#ifdef FANCHECK
+	if (fans_check_enabled == false) fan_check_error = EFCE_OK; //reset error if fanCheck is disabled during error. Allows resuming print.
+#endif //FANCHECK
 }
 
 #ifdef MMU_HAS_CUTTER
@@ -4927,6 +4846,7 @@ void lcd_wizard() {
 	}
 }
 
+#if (LANG_MODE != 0)
 void lcd_language()
 {
 	lcd_update_enable(true);
@@ -4946,6 +4866,7 @@ void lcd_language()
 	else
 		lang_select(LANG_ID_PRI);
 }
+#endif
 
 static void wait_preheat()
 {
@@ -5054,8 +4975,10 @@ void lcd_wizard(WizState state)
 	// Make sure EEPROM_WIZARD_ACTIVE is true if entering using different entry point
 	// other than WizState::Run - it is useful for debugging wizard.
 	if (state != S::Run) eeprom_update_byte((uint8_t*)EEPROM_WIZARD_ACTIVE, 1);
-
-	while (!end) {
+    
+    FORCE_BL_ON_START;
+	
+    while (!end) {
 		printf_P(PSTR("Wizard state: %d\n"), state);
 		switch (state) {
 		case S::Run: //Run wizard?
@@ -5191,7 +5114,9 @@ void lcd_wizard(WizState state)
 		default: break;
 		}
 	}
-
+    
+    FORCE_BL_ON_END;
+    
 	printf_P(_N("Wizard end state: %d\n"), state);
 	switch (state) { //final message
 	case S::Restore: //printer was already calibrated
@@ -5828,6 +5753,13 @@ static void lcd_settings_menu()
 	SETTINGS_SD;
 	SETTINGS_SOUND;
 
+#ifdef LCD_BL_PIN
+    if (backlightSupport)
+    {
+        MENU_ITEM_SUBMENU_P(_T(MSG_BRIGHTNESS), lcd_backlight_menu);
+    }
+#endif //LCD_BL_PIN
+
 	if (farm_mode)
 	{
 		MENU_ITEM_SUBMENU_P(PSTR("Farm number"), lcd_farm_no);
@@ -6031,7 +5963,7 @@ void bowden_menu() {
 	}
 }
 
-//#ifdef SNMM
+#ifdef SNMM
 
 static char snmm_stop_print_menu() { //menu for choosing which filaments will be unloaded in stop print
 	lcd_clear();
@@ -6081,6 +6013,8 @@ static char snmm_stop_print_menu() { //menu for choosing which filaments will be
 	}
 	
 }
+
+#endif //SNMM
 
 //! @brief Select one of numbered items
 //!
@@ -6708,6 +6642,7 @@ static void lcd_test_menu()
 static bool fan_error_selftest()
 {
 #ifdef FANCHECK
+    if (!fans_check_enabled) return 0;
 
     fanSpeed = 255;
 #ifdef FAN_SOFT_PWM
@@ -6738,9 +6673,8 @@ static bool fan_error_selftest()
         return 1;
     }
 #endif
+#endif //FANCHECK
     return 0;
-
-#endif //FANCHECK   
 }
 
 //! @brief Resume paused print
@@ -6755,10 +6689,10 @@ void lcd_resume_print()
 
     if (fan_error_selftest()) return; //abort if error persists
 
+    isPrintPaused = false;
     restore_print_from_ram_and_continue(0.0);
     pause_time += (_millis() - start_pause_print); //accumulate time when print is paused for correct statistics calculation
     refresh_cmd_timeout();
-    isPrintPaused = false;
     SERIAL_PROTOCOLLNRPGM(MSG_OCTOPRINT_RESUMED); //resume octoprint
 }
 
@@ -6918,7 +6852,7 @@ static void lcd_main_menu()
 			{
 				MENU_ITEM_FUNCTION_P(_i("Pause print"), lcd_pause_print);////MSG_PAUSE_PRINT
 			}
-			else
+			else if(isPrintPaused)
 			{
 				#ifdef FANCHECK
 					if((fan_check_error == EFCE_FIXED) || (fan_check_error == EFCE_OK))
@@ -7075,6 +7009,60 @@ static void lcd_colorprint_change() {
 	lcd_draw_update = 3;
 }
 
+
+#ifdef LA_LIVE_K
+// @wavexx: looks like there's no generic float editing function in menu.cpp so we
+//          redefine our custom handling functions to mimick other tunables
+const char menu_fmt_float13off[] PROGMEM = "%c%-13.13S%6.6S";
+
+static void lcd_advance_draw_K(char chr, float val)
+{
+    if (val <= 0)
+        lcd_printf_P(menu_fmt_float13off, chr, MSG_ADVANCE_K, _T(MSG_OFF));
+    else
+        lcd_printf_P(menu_fmt_float13, chr, MSG_ADVANCE_K, val);
+}
+
+static void lcd_advance_edit_K(void)
+{
+    if (lcd_draw_update)
+    {
+        if (lcd_encoder < 0) lcd_encoder = 0;
+        if (lcd_encoder > 999) lcd_encoder = 999;
+        lcd_set_cursor(0, 1);
+        lcd_advance_draw_K(' ', 0.01 * lcd_encoder);
+    }
+    if (LCD_CLICKED)
+    {
+        extruder_advance_K = 0.01 * lcd_encoder;
+        menu_back_no_reset();
+    }
+}
+
+static uint8_t lcd_advance_K()
+{
+    if (menu_item == menu_line)
+    {
+        if (lcd_draw_update)
+        {
+            lcd_set_cursor(0, menu_row);
+            lcd_advance_draw_K((lcd_encoder == menu_item)?'>':' ', extruder_advance_K);
+        }
+        if (menu_clicked && (lcd_encoder == menu_item))
+        {
+            menu_submenu_no_reset(lcd_advance_edit_K);
+            lcd_encoder = 100. * extruder_advance_K;
+            return menu_item_ret();
+        }
+    }
+    menu_item++;
+    return 0;
+}
+
+#define MENU_ITEM_EDIT_advance_K() do { if (lcd_advance_K()) return; } while (0)
+#endif
+
+
 static void lcd_tune_menu()
 {
 	typedef struct
@@ -7113,8 +7101,11 @@ static void lcd_tune_menu()
 
 	MENU_ITEM_EDIT_int3_P(_T(MSG_FAN_SPEED), &fanSpeed, 0, 255);//5
 	MENU_ITEM_EDIT_int3_P(_i("Flow"), &extrudemultiply, 10, 999);//6////MSG_FLOW
+#ifdef LA_LIVE_K
+	MENU_ITEM_EDIT_advance_K();//7
+#endif
 #ifdef FILAMENTCHANGEENABLE
-	MENU_ITEM_FUNCTION_P(_T(MSG_FILAMENTCHANGE), lcd_colorprint_change);//7
+	MENU_ITEM_FUNCTION_P(_T(MSG_FILAMENTCHANGE), lcd_colorprint_change);//8
 #endif
 
 #ifdef FILAMENT_SENSOR
@@ -7170,6 +7161,12 @@ static void lcd_tune_menu()
 #endif //TMC2130
 	SETTINGS_MMU_MODE;
     SETTINGS_SOUND;
+#ifdef LCD_BL_PIN
+    if (backlightSupport)
+    {
+        MENU_ITEM_SUBMENU_P(_T(MSG_BRIGHTNESS), lcd_backlight_menu);
+    }
+#endif //LCD_BL_PIN
 	MENU_END();
 }
 
@@ -7218,6 +7215,36 @@ static void lcd_mesh_bed_leveling_settings()
 	MENU_END();
 	//SETTINGS_MBL_MODE;
 }
+
+#ifdef LCD_BL_PIN
+static void backlight_mode_toggle()
+{
+    switch (backlightMode)
+    {
+        case BACKLIGHT_MODE_BRIGHT: backlightMode = BACKLIGHT_MODE_DIM; break;
+        case BACKLIGHT_MODE_DIM: backlightMode = BACKLIGHT_MODE_AUTO; break;
+        case BACKLIGHT_MODE_AUTO: backlightMode = BACKLIGHT_MODE_BRIGHT; break;
+        default: backlightMode = BACKLIGHT_MODE_BRIGHT; break;
+    }
+    backlight_save();
+}
+
+static void lcd_backlight_menu()
+{
+    MENU_BEGIN();
+    ON_MENU_LEAVE(
+        backlight_save();
+    );
+    
+    MENU_ITEM_BACK_P(_T(MSG_BACK));
+    MENU_ITEM_EDIT_int3_P(_T(MSG_BL_HIGH), &backlightLevel_HIGH, backlightLevel_LOW, 255);
+    MENU_ITEM_EDIT_int3_P(_T(MSG_BL_LOW), &backlightLevel_LOW, 0, backlightLevel_HIGH);
+	MENU_ITEM_TOGGLE_P(_T(MSG_MODE), ((backlightMode==BACKLIGHT_MODE_BRIGHT) ? _T(MSG_BRIGHT) : ((backlightMode==BACKLIGHT_MODE_DIM) ? _T(MSG_DIM) : _T(MSG_AUTO))), backlight_mode_toggle);
+    MENU_ITEM_EDIT_int3_P(_T(MSG_TIMEOUT), &backlightTimer_period, 1, 999);
+    
+    MENU_END();
+}
+#endif //LCD_BL_PIN
 
 static void lcd_control_temperature_menu()
 {
@@ -7269,42 +7296,66 @@ static void lcd_sd_updir()
 
 void lcd_print_stop()
 {
-//-//
-     if(!card.sdprinting)
-          {
-          SERIAL_ECHOLNRPGM(MSG_OCTOPRINT_CANCEL);   // for Octoprint
-          }
-	saved_printing = false;
-    saved_printing_type = PRINTING_TYPE_NONE;
-	cancel_heatup = true;
-#ifdef MESH_BED_LEVELING
-	mbl.active = false;
-#endif
-	// Stop the stoppers, update the position from the stoppers.
-	if (mesh_bed_leveling_flag == false && homing_flag == false)
-	{
-		planner_abort_hard();
-		// Because the planner_abort_hard() initialized current_position[Z] from the stepper,
-		// Z baystep is no more applied. Reset it.
-		babystep_reset();
-	}
-	// Clean the input command queue.
+    if (!card.sdprinting) {
+        SERIAL_ECHOLNRPGM(MSG_OCTOPRINT_CANCEL);   // for Octoprint
+    }
+
+    CRITICAL_SECTION_START;
+
+    // Clear any saved printing state
+    cancel_saved_printing();
+
+    // Abort the planner/queue/sd
+    planner_abort_hard();
 	cmdqueue_reset();
-	lcd_setstatuspgm(_T(MSG_PRINT_ABORTED));
 	card.sdprinting = false;
 	card.closefile();
+    st_reset_timer();
+
+    CRITICAL_SECTION_END;
+
+#ifdef MESH_BED_LEVELING
+    mbl.active = false; //also prevents undoing the mbl compensation a second time in the second planner_abort_hard()
+#endif
+
+	lcd_setstatuspgm(_T(MSG_PRINT_ABORTED));
 	stoptime = _millis();
 	unsigned long t = (stoptime - starttime - pause_time) / 1000; //time in s
 	pause_time = 0;
 	save_statistics(total_filament_used, t);
-	lcd_return_to_status();
-	lcd_ignore_click(true);
-	lcd_commands_step = 0;
-	lcd_commands_type = LcdCommands::StopPrint;
-	// Turn off the print fan
-	SET_OUTPUT(FAN_PIN);
-	WRITE(FAN_PIN, 0);
-	fanSpeed = 0;
+
+    lcd_commands_step = 0;
+    lcd_commands_type = LcdCommands::Idle;
+
+    lcd_cooldown(); //turns off heaters and fan; goes to status screen.
+    cancel_heatup = true; //unroll temperature wait loop stack.
+
+    current_position[Z_AXIS] += 10; //lift Z.
+    plan_buffer_line_curposXYZE(manual_feedrate[Z_AXIS] / 60, active_extruder);
+
+    if (axis_known_position[X_AXIS] && axis_known_position[Y_AXIS]) //if axis are homed, move to parked position.
+    {
+        current_position[X_AXIS] = X_CANCEL_POS;
+        current_position[Y_AXIS] = Y_CANCEL_POS;
+        plan_buffer_line_curposXYZE(manual_feedrate[0] / 60, active_extruder);
+    }
+    st_synchronize();
+
+    if (mmu_enabled) extr_unload(); //M702 C
+
+    finishAndDisableSteppers(); //M84
+
+    lcd_setstatuspgm(_T(WELCOME_MSG));
+    custom_message_type = CustomMsg::Status;
+
+    planner_abort_hard(); //needs to be done since plan_buffer_line resets waiting_inside_plan_buffer_line_print_aborted to false. Also copies current to destination.
+    
+    axis_relative_modes[X_AXIS] = false;
+    axis_relative_modes[Y_AXIS] = false;
+    axis_relative_modes[Z_AXIS] = false;
+    axis_relative_modes[E_AXIS] = true;
+    
+    isPrintPaused = false; //clear isPrintPaused flag to allow starting next print after pause->stop scenario.
 }
 
 void lcd_sdcard_stop()
@@ -7506,6 +7557,10 @@ bool lcd_selftest()
 #if !IR_SENSOR_ANALOG
      _delay(2000);
 #endif //!IR_SENSOR_ANALOG
+    
+    FORCE_BL_ON_START;
+    
+	_delay(2000);
 	KEEPALIVE_STATE(IN_HANDLER);
 #if IR_SENSOR_ANALOG
      bool bAction;
@@ -7738,7 +7793,10 @@ bool lcd_selftest()
 	#ifdef TMC2130
 	  FORCE_HIGH_POWER_END;
 	#endif // TMC2130
-	KEEPALIVE_STATE(NOT_BUSY);
+    
+    FORCE_BL_ON_END;
+	
+    KEEPALIVE_STATE(NOT_BUSY);
 	return(_result);
 }
 
@@ -8147,7 +8205,9 @@ static bool lcd_selfcheck_check_heater(bool _isbed)
 static void lcd_selftest_error(TestError testError, const char *_error_1, const char *_error_2)
 {
 	lcd_beeper_quick_feedback();
-
+    
+    FORCE_BL_ON_END;
+    
 	target_temperature[0] = 0;
 	target_temperature_bed = 0;
 	manage_heater();
@@ -8746,6 +8806,7 @@ void ultralcd_init()
         else lcd_autoDeplete = autoDepleteRaw;
 
     }
+    backlight_init();
 	lcd_init();
 	lcd_refresh();
 	lcd_longpress_func = menu_lcd_longpress_func;
@@ -8894,6 +8955,7 @@ uint8_t get_message_level()
 
 void menu_lcd_longpress_func(void)
 {
+	backlight_wake();
     if (homing_flag || mesh_bed_leveling_flag || menu_menu == lcd_babystep_z || menu_menu == lcd_move_z)
     {
         // disable longpress during re-entry, while homing or calibration
@@ -8975,6 +9037,7 @@ void menu_lcd_lcdupdate_func(void)
 		lcd_draw_update = 2;
 		lcd_oldcardstatus = IS_SD_INSERTED;
 		lcd_refresh(); // to maybe revive the LCD if static electricity killed it.
+        backlight_wake();
 		if (lcd_oldcardstatus)
 		{
 			card.initsd();
@@ -8992,6 +9055,7 @@ void menu_lcd_lcdupdate_func(void)
 		}
 	}
 #endif//CARDINSERTED
+    backlight_update();
 	if (lcd_next_update_millis < _millis())
 	{
 		if (abs(lcd_encoder_diff) >= ENCODER_PULSES_PER_STEP)
@@ -9002,9 +9066,14 @@ void menu_lcd_lcdupdate_func(void)
 			Sound_MakeSound(e_SOUND_TYPE_EncoderMove);
 			lcd_encoder_diff = 0;
 			lcd_timeoutToStatus.start();
+			backlight_wake();
 		}
 
-		if (LCD_CLICKED) lcd_timeoutToStatus.start();
+		if (LCD_CLICKED)
+		{
+			lcd_timeoutToStatus.start();
+			backlight_wake();
+		}
 
 		(*menu_menu)();
 

@@ -8774,10 +8774,10 @@ static void menu_action_sdfile(const char* filename)
 	  }
   }
   
-  if (!check_file(filename)) {
+  /*if (!check_file(filename)) {
 	  result = lcd_show_fullscreen_message_yes_no_and_wait_P(_i("File incomplete. Continue anyway?"), false, false);////MSG_FILE_INCOMPLETE c=20 r=2
 	  lcd_update_enable(true);
-  }
+  }*/
   if (result) {
 	  enquecommand(cmd);
 	  enquecommand_P(PSTR("M24"));

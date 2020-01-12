@@ -799,7 +799,7 @@ void tmc2130_do_steps(uint8_t axis, uint16_t steps, uint8_t dir, uint16_t delay_
 
 void tmc2130_goto_step(uint8_t axis, uint8_t step, uint8_t dir, uint16_t delay_us, uint16_t microstep_resolution)
 {
-	printf_P(PSTR("tmc2130_goto_step %d %d %d %d \n"), axis, step, dir, delay_us, microstep_resolution);
+	printf_P(PSTR("tmc2130_goto_step %u %u %u %u %u\n"), axis, step, dir, delay_us, microstep_resolution);
 	uint8_t shift; for (shift = 0; shift < 8; shift++) if (microstep_resolution == (256u >> shift)) break;
 	uint16_t cnt = 4 * (1 << (8 - shift));
 	uint16_t mscnt = tmc2130_rd_MSCNT(axis);
@@ -807,23 +807,30 @@ void tmc2130_goto_step(uint8_t axis, uint8_t step, uint8_t dir, uint16_t delay_u
 	{
 		dir = tmc2130_get_inv(axis)?0:1;
 		int steps = (int)step - (int)(mscnt >> shift);
+		//printf_P(PSTR("tgs %u %u %d \n"), mscnt, cnt,steps);
 		if (steps > static_cast<int>(cnt / 2))
 		{
+		//	printf_P(PSTR("gtc"));
 			dir ^= 1;
-			steps = cnt - steps; // This can create a negative step value
+			steps = cnt - steps;
 		}
-        if (steps < 0)
+		if (steps < 0)
 		{
+		//	printf_P(PSTR("ltz"));
 			dir ^= 1;
 			steps = -steps;
 		}
+
+		//printf_P(PSTR("tgs2 %u %d, %u \n"), cnt,steps,dir);
 		cnt = steps;
+		
 	}
 	tmc2130_set_dir(axis, dir);
 	delayMicroseconds(100);
 	mscnt = tmc2130_rd_MSCNT(axis);
 	while ((cnt--) && ((mscnt >> shift) != step))
 	{
+		//printf_P(PSTR("tmc2130_goto_step_while %u %u %u %u \n"),cnt, mscnt ,mscnt>>shift, step);
 		tmc2130_do_step(axis);
 		delayMicroseconds(delay_us);
 		mscnt = tmc2130_rd_MSCNT(axis);

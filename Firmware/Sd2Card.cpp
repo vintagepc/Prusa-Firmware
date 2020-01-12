@@ -319,7 +319,6 @@ bool Sd2Card::init(uint8_t sckRateID, uint8_t chipSelectPin) {
       goto fail;
     }
   }
-
   // send 0xFF until 0xFF received to give card some clock cycles
   t0 = (uint16_t)_millis();
   SERIAL_ECHOLNRPGM(PSTR("Sending 0xFF"));
@@ -334,6 +333,7 @@ bool Sd2Card::init(uint8_t sckRateID, uint8_t chipSelectPin) {
       goto fail;
     }
   }
+
 
   // check SD version
   if ((cardCommand(CMD8, 0x1AA) & R1_ILLEGAL_COMMAND)) {

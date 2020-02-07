@@ -240,6 +240,7 @@ static bool lcd_selftest_IRsensor();
 #endif //IR_SENSOR_ANALOG
 static void lcd_selftest_error(TestError error, const char *_error_1, const char *_error_2);
 static void lcd_colorprint_change();
+static void lcd_home_xy();
 #ifdef SNMM
 static int get_ext_nr();
 #endif //SNMM
@@ -6808,7 +6809,7 @@ static void lcd_main_menu()
   }
 
 
-  if ( moves_planned() || IS_SD_PRINTING || is_usb_printing || (lcd_commands_type == LcdCommands::Layer1Cal))
+  if ( moves_planned() || IS_SD_PRINTING || is_usb_printing || isPrintPaused || (lcd_commands_type == LcdCommands::Layer1Cal))
   {
     MENU_ITEM_SUBMENU_P(_i("Tune"), lcd_tune_menu);////MSG_TUNE
   } else 
@@ -6984,6 +6985,14 @@ void stepper_timer_overflow() {
 #endif /* DEBUG_STEPPER_TIMER_MISSED */
 
 
+static void lcd_home_xy() {
+	
+	enquecommand_P(PSTR("G28 X Y"));
+	lcd_setstatuspgm(_T(MSG_AUTO_HOME));
+	lcd_return_to_status();
+	lcd_draw_update = 3;
+}
+
 static void lcd_colorprint_change() {
 	
 	enquecommand_P(PSTR("M600"));
@@ -7092,7 +7101,7 @@ static void lcd_tune_menu()
 #ifdef FILAMENTCHANGEENABLE
 	MENU_ITEM_FUNCTION_P(_T(MSG_FILAMENTCHANGE), lcd_colorprint_change);//8
 #endif
-
+    MENU_ITEM_FUNCTION_P(printf_P(PSTR("%s XY"),_T(MSG_AUTO_HOME)), lcd_home_xy);//8
 #ifdef FILAMENT_SENSOR
 	if (FSensorStateMenu == 0) {
           if (fsensor_not_responding && (mmu_enabled == false)) {

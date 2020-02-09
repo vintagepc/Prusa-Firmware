@@ -48,6 +48,7 @@ void prusa_statistics(int _message, uint8_t _col_nr = 0);
 void lcd_confirm_print();
 unsigned char lcd_choose_color();
 void lcd_load_filament_color_check();
+void lcd_rehome_xy();
 //void lcd_mylang();
 
 extern void lcd_belttest();

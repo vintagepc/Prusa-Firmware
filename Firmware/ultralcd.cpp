@@ -7440,7 +7440,7 @@ static void lcd_belttest_v()
 void lcd_belttest()
 {
     bool _result = true;
-    
+    lcd_clear();
 	// Belttest requires high power mode. Enable it.
 	FORCE_HIGH_POWER_START;
     
@@ -7467,11 +7467,12 @@ void lcd_belttest()
         lcd_printf_P(_i("Done"));
     }   
 
-	lcd_puts_at_P(19,3,char(2)); // Checkmark
+	lcd_set_cursor(19, 3);
+	lcd_print(char(2));
 	FORCE_HIGH_POWER_END;
     
+	lcd_wait_for_click_delay(10):
     KEEPALIVE_STATE(NOT_BUSY);
-    _delay(3000);
 }
 #endif //TMC2130
 

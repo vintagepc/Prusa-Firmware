@@ -948,8 +948,13 @@ inline bool find_bed_induction_sensor_point_z(float minimum_z, uint8_t n_iter, i
 {
 	bool high_deviation_occured = false; 
     bedPWMDisabled = 1;
+    bool bHighPowerForced = false;
 #ifdef TMC2130
-	FORCE_HIGH_POWER_START;
+	if (tmc2130_mode == TMC2130_MODE_SILENT) 
+    {
+        FORCE_HIGH_POWER_START;
+        bHighPowerForced = true;
+    }
 #endif
 	//printf_P(PSTR("Min. Z: %f\n"), minimum_z);
 	#ifdef SUPPORT_VERBOSITY
@@ -1044,7 +1049,7 @@ inline bool find_bed_induction_sensor_point_z(float minimum_z, uint8_t n_iter, i
     enable_z_endstop(endstop_z_enabled);
 //    SERIAL_ECHOLNPGM("find_bed_induction_sensor_point_z 3");
 #ifdef TMC2130
-	FORCE_HIGH_POWER_END;
+	if (bHighPowerForced) FORCE_HIGH_POWER_END;
 #endif
     bedPWMDisabled = 0;
 	return true;

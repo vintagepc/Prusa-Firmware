@@ -5304,25 +5304,34 @@ while(0)
 #endif //MMU_HAS_CUTTER
 
 #ifdef TMC2130
+
+#ifdef PSU_Delta // This setup changes to "stealth" mode on timeout, need to check for that.
+#define SILENT_DESYNC_IF if (bDesync && bEnableForce_z) 
+#else
+#define SILENT_DESYNC_IF if (bDesync)
+#endif
+
 #define SETTINGS_SILENT_MODE \
 do\
 {\
     if(!farm_mode)\
     {\
-		bool bDesync = SilentModeMenu != tmc2130_mode; \
-		if (SilentModeMenu == SILENT_MODE_NORMAL && bDesync) \
-		{\
-			MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M915"), lcd_silent_mode_set);\
-		}\
-		else if (bDesync) \
-		{\
-			MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M914") , lcd_silent_mode_set);\
-		}\
-        else if (SilentModeMenu == SILENT_MODE_NORMAL)\
+		/* M914/5 do not update SilentModeMenu, only tmc2130_mode */\
+		bool bDesync = tmc2130_mode ^ eeprom_read_byte((uint8_t*)EEPROM_SILENT);\
+		if (SilentModeMenu == SILENT_MODE_NORMAL) \
         {\
-            MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_NORMAL), lcd_silent_mode_set);\
+			SILENT_DESYNC_IF\
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M915"), lcd_silent_mode_set);\
+			else\
+            	MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_NORMAL), lcd_silent_mode_set);\
         }\
-        else MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_STEALTH), lcd_silent_mode_set);\
+        else\
+		{\
+			if (bDesync)\
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M914") , lcd_silent_mode_set);\
+			else\
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_STEALTH), lcd_silent_mode_set);\
+		}\
         if (SilentModeMenu == SILENT_MODE_NORMAL)\
         {\
             if (lcd_crash_detect_enabled()) MENU_ITEM_TOGGLE_P(_T(MSG_CRASHDETECT), _T(MSG_ON), crash_mode_switch);\
@@ -7143,7 +7152,7 @@ static void lcd_tune_menu()
 #ifdef FILAMENTCHANGEENABLE
 	MENU_ITEM_FUNCTION_P(_T(MSG_FILAMENTCHANGE), lcd_colorprint_change);//8
 #endif
-    MENU_ITEM_FUNCTION_P(printf_P(PSTR("%s XY"),_T(MSG_AUTO_HOME)), lcd_home_xy);//8
+    MENU_ITEM_FUNCTION_P(_T(MSG_AUTO_HOME), lcd_home_xy);//8
 #ifdef FILAMENT_SENSOR
 	if (FSensorStateMenu == 0) {
           if (fsensor_not_responding && (mmu_enabled == false)) {
@@ -7175,8 +7184,22 @@ static void lcd_tune_menu()
 #ifdef TMC2130
      if(!farm_mode)
      {
-          if (SilentModeMenu == SILENT_MODE_NORMAL) MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_NORMAL), lcd_silent_mode_set);
-          else MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_STEALTH), lcd_silent_mode_set);
+        /* M914/5 do not update SilentModeMenu, only tmc2130_mode */
+		bool bDesync = tmc2130_mode ^ eeprom_read_byte((uint8_t*)EEPROM_SILENT);
+		if (SilentModeMenu == SILENT_MODE_NORMAL)
+        {\
+			SILENT_DESYNC_IF
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M915"), lcd_silent_mode_set);
+			else
+            	MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_NORMAL), lcd_silent_mode_set);
+        }
+        else
+		{
+			if (bDesync)
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), PSTR("M914") , lcd_silent_mode_set);
+			else
+				MENU_ITEM_TOGGLE_P(_T(MSG_MODE), _T(MSG_STEALTH), lcd_silent_mode_set);
+		}
 
           if (SilentModeMenu == SILENT_MODE_NORMAL)
           {
@@ -7504,13 +7527,13 @@ void lcd_belttest()
 	// that clobbers ours, with more info than we could provide. So on fail we just fall through to take us back to status.
     if (lcd_selfcheck_axis_sg(X_AXIS)){
 		X = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_X));
-		lcd_set_cursor(9,1), lcd_printf_P(PSTR("%d"),X); // Show new X value next to old one.
+		lcd_set_cursor(10,1), lcd_printf_P(PSTR("%d"),X); // Show new X value next to old one.
         lcd_puts_at_P(0,2,_i("Checking Y axis  "));
 		lcd_set_cursor(0,3), lcd_printf_P(PSTR("Y: %d -> ..."),Y);
 		if (lcd_selfcheck_axis_sg(Y_AXIS))
 		{
 			Y = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_Y));
-			lcd_set_cursor(9,3),lcd_printf_P(PSTR("%d"),Y);
+			lcd_set_cursor(10,3),lcd_printf_P(PSTR("%d"),Y);
 			lcd_set_cursor(19, 3);
 			lcd_print(LCD_STR_UPLEVEL);
 			lcd_wait_for_click_delay(10);

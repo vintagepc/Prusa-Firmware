@@ -7467,55 +7467,38 @@ static void lcd_belttest_v()
     lcd_belttest();
     menu_back_if_clicked();
 }
-void lcd_belttest_print(const char* msg, uint16_t X, uint16_t Y)
-{
-    lcd_clear();
-    lcd_printf_P(
-              _N(
-                 "%S:\n"
-                 "%S\n"
-                 "X:%d\n"
-                 "Y:%d"
-                 ),
-              _i("Belt status"),
-              msg,
-              X,Y
-            );
-}
+
 void lcd_belttest()
 {
-    bool _result = true;
-    
-    #ifdef TMC2130 // Belttest requires high power mode. Enable it.
-	    FORCE_HIGH_POWER_START;
-    #endif
+    lcd_clear();
+	// Belttest requires high power mode. Enable it.
+	FORCE_HIGH_POWER_START;
     
     uint16_t   X = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_X));
     uint16_t   Y = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_Y));
-    lcd_belttest_print(_i("Checking X..."), X, Y);
-
+	lcd_puts_at_P(0,0,_i("Checking X axis  ")); // share message with selftest
+	lcd_set_cursor(0,1), lcd_printf_P(PSTR("X: %d -> ..."),X);
     KEEPALIVE_STATE(IN_HANDLER);
     
-    _result = lcd_selfcheck_axis_sg(X_AXIS);
-    X = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_X));
-    if (_result){
-        lcd_belttest_print(_i("Checking Y..."), X, Y);
-        _result = lcd_selfcheck_axis_sg(Y_AXIS);
-        Y = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_Y));
+	// N.B: it doesn't make sense to handle !lcd_selfcheck...() because selftest_sg throws its own error screen
+	// that clobbers ours, with more info than we could provide. So on fail we just fall through to take us back to status.
+    if (lcd_selfcheck_axis_sg(X_AXIS)){
+		X = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_X));
+		lcd_set_cursor(9,1), lcd_printf_P(PSTR("%d"),X); // Show new X value next to old one.
+        lcd_puts_at_P(0,2,_i("Checking Y axis  "));
+		lcd_set_cursor(0,3), lcd_printf_P(PSTR("Y: %d -> ..."),Y);
+		if (lcd_selfcheck_axis_sg(Y_AXIS))
+		{
+			Y = eeprom_read_word((uint16_t*)(EEPROM_BELTSTATUS_Y));
+			lcd_set_cursor(9,3),lcd_printf_P(PSTR("%d"),Y);
+			lcd_set_cursor(19, 3);
+			lcd_print(LCD_STR_UPLEVEL);
+			lcd_wait_for_click_delay(10);
+		}
     }
-    
-    if (!_result) {
-        lcd_belttest_print(_i("Error"), X, Y);
-    } else {
-        lcd_belttest_print(_i("Done"), X, Y);
-    }   
-
-    #ifdef TMC2130
-	    FORCE_HIGH_POWER_END;
-    #endif
-    
+	
+	FORCE_HIGH_POWER_END;
     KEEPALIVE_STATE(NOT_BUSY);
-    _delay(3000);
 }
 #endif //TMC2130
 
@@ -7869,6 +7852,7 @@ static bool lcd_selfcheck_axis_sg(unsigned char axis) {
 	tmc2130_sg_stop_on_crash = false;
 	tmc2130_home_exit();
 	enable_endstops(true);
+
 
 	raise_z_above(MESH_HOME_Z_SEARCH);
 	st_synchronize();

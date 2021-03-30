@@ -17,10 +17,10 @@ uint8_t lang_selected = 0;
 
 #if (LANG_MODE == 0) //primary language only
 
-uint8_t lang_select(__attribute__((unused)) uint8_t lang) { return 0; }
+uint8_t lang_select(_UNUSED uint8_t lang) { return 0; }
 uint8_t lang_get_count() { return 1; }
-uint16_t lang_get_code(__attribute__((unused)) uint8_t lang) { return LANG_CODE_EN; }
-const char* lang_get_name_by_code(__attribute__((unused)) uint16_t code) { return _n("English"); }
+uint16_t lang_get_code(_UNUSED uint8_t lang) { return LANG_CODE_EN; }
+const char* lang_get_name_by_code(_UNUSED uint16_t code) { return _n("English"); }
 void lang_reset(void) { }
 uint8_t lang_is_selected(void) { return 1; }
 
@@ -210,6 +210,16 @@ const char* lang_get_name_by_code(uint16_t code)
 	case LANG_CODE_FR: return _n("Francais");
 	case LANG_CODE_IT: return _n("Italiano");
 	case LANG_CODE_PL: return _n("Polski");
+#ifdef COMMUNITY_LANG_SUPPORT //Community language support
+#ifdef COMMUNITY_LANG_NL
+	case LANG_CODE_NL: return _n("Nederlands"); //community contribution
+#endif // COMMUNITY_LANG_NL
+
+//Use the 3 lines below as a template and replace 'QR' and 'New language'
+//#ifdef COMMUNITY_LANG_QR 
+//	case LANG_CODE_QR: return _n("New language"); //community contribution
+//#endif // COMMUNITY_LANG_QR
+#endif // COMMUNITY_LANG_SUPPORT
 	}
 	return _n("??");
 }

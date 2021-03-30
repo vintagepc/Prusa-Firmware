@@ -5,8 +5,11 @@
 
 
 #include "config.h"
+#include "macros.h"
 #include <inttypes.h>
-//#include <stdio.h>
+#ifdef DEBUG_SEC_LANG
+    #include <stdio.h>
+#endif //DEBUG_SEC_LANG
 
 #define PROTOCOL_VERSION "1.0"
 
@@ -19,9 +22,6 @@
 #endif
 
 #define MSG_FW_VERSION                   "Firmware"
-
-#define STRINGIFY_(n) #n
-#define STRINGIFY(n) STRINGIFY_(n)
 
 #if (LANG_MODE == 0) //primary language only
 #define PROGMEM_I2 __attribute__((section(".progmem0")))
@@ -96,6 +96,15 @@ typedef struct
 #define LANG_CODE_FR 0x6672 //!<'fr'
 #define LANG_CODE_IT 0x6974 //!<'it'
 #define LANG_CODE_PL 0x706c //!<'pl'
+#ifdef COMMUNITY_LANG_SUPPORT //Community language support
+#ifdef COMMUNITY_LANG_NL
+#define LANG_CODE_NL 0x6e6c //!<'nl'
+#endif // COMMUNITY_LANG_NL
+//Use the 3 lines below as a template and replace 'QR', '0X7172' and 'qr'
+//#ifdef COMMUNITY_LANG_QR
+//#define LANG_CODE_QR 0x7172 //!<'qr'
+//#endif // COMMUNITY_LANG_QR
+#endif // COMMUNITY_LANG_SUPPORT
 ///@}
 
 #if defined(__cplusplus)
